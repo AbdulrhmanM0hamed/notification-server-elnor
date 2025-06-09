@@ -9,6 +9,16 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Define required environment variables
+const requiredEnvVars = [
+  'type',
+  'project_id',
+  'private_key_id',
+  'private_key',
+  'client_email',
+  'client_id'
+];
+
 // Debug environment variables
 console.log('Environment Variables Check:');
 console.log('type:', process.env.type);
@@ -19,15 +29,6 @@ console.log('private_key exists:', !!process.env.private_key);
 // Initialize Firebase Admin with environment variables
 try {
   // Check if all required environment variables are present
-  const requiredEnvVars = [
-    'type',
-    'project_id',
-    'private_key_id',
-    'private_key',
-    'client_email',
-    'client_id'
-  ];
-
   const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
   if (missingVars.length > 0) {
     throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
