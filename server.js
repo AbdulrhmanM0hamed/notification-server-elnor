@@ -35,11 +35,22 @@ try {
 
   // Fix private key formatting if needed
   let privateKey = process.env.private_key;
+  if (!privateKey) {
+    throw new Error('Private key is undefined or empty');
+  }
+  
+  console.log('Private key before processing:', privateKey.substring(0, 20) + '...');
+  
   if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
     privateKey = privateKey.slice(1, -1);
+    console.log('Removed surrounding quotes from private key');
   }
+  
   // Replace \\n with \n if needed
-  privateKey = privateKey.replace(/\\n/g, '\n');
+  if (privateKey.includes('\\n')) {
+    privateKey = privateKey.replace(/\\n/g, '\n');
+    console.log('Replaced \\n with \n in private key');
+  }
 
   const serviceAccount = {
     type: process.env.type,
@@ -57,7 +68,8 @@ try {
 
   console.log('Service Account Config:', {
     ...serviceAccount,
-    private_key: serviceAccount.private_key ? 'PRESENT' : 'MISSING'
+    private_key: 'HIDDEN',
+    private_key_id: 'HIDDEN'
   });
 
   admin.initializeApp({
@@ -67,6 +79,7 @@ try {
 } catch (error) {
   console.error('Error initializing Firebase Admin:', error);
   console.error('Error details:', error.stack);
+  console.error('Current environment:', process.env.NODE_ENV);
 }
 
 // Health check endpoint
@@ -80,7 +93,11 @@ app.get('/', (req, res) => {
       project_id: process.env.project_id,
       client_email: process.env.client_email,
       private_key_exists: !!process.env.private_key,
-      error: admin.apps.length === 0 ? 'Firebase initialization failed' : null
+      error: admin.apps.length === 0 ? 'Firebase initialization failed' : null,
+      env_vars_present: requiredEnvVars.map(varName => ({
+        name: varName,
+        exists: !!process.env[varName]
+      }))
     }
   };
   console.log('Health check response:', initStatus);
