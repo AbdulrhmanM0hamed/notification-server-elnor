@@ -11,21 +11,21 @@ app.use(cors());
 
 // Debug environment variables
 console.log('Environment Variables Check:');
-console.log('FIREBASE_TYPE:', process.env.FIREBASE_TYPE);
-console.log('FIREBASE_PROJECT_ID:', process.env.FIREBASE_PROJECT_ID);
-console.log('FIREBASE_CLIENT_EMAIL:', process.env.FIREBASE_CLIENT_EMAIL);
-console.log('FIREBASE_PRIVATE_KEY exists:', !!process.env.FIREBASE_PRIVATE_KEY);
+console.log('type:', process.env.type);
+console.log('project_id:', process.env.project_id);
+console.log('client_email:', process.env.client_email);
+console.log('private_key exists:', !!process.env.private_key);
 
 // Initialize Firebase Admin with environment variables
 try {
   // Check if all required environment variables are present
   const requiredEnvVars = [
-    'FIREBASE_TYPE',
-    'FIREBASE_PROJECT_ID',
-    'FIREBASE_PRIVATE_KEY_ID',
-    'FIREBASE_PRIVATE_KEY',
-    'FIREBASE_CLIENT_EMAIL',
-    'FIREBASE_CLIENT_ID'
+    'type',
+    'project_id',
+    'private_key_id',
+    'private_key',
+    'client_email',
+    'client_id'
   ];
 
   const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -34,7 +34,7 @@ try {
   }
 
   // Fix private key formatting if needed
-  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  let privateKey = process.env.private_key;
   if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
     privateKey = privateKey.slice(1, -1);
   }
@@ -42,17 +42,17 @@ try {
   privateKey = privateKey.replace(/\\n/g, '\n');
 
   const serviceAccount = {
-    type: process.env.FIREBASE_TYPE,
-    project_id: process.env.FIREBASE_PROJECT_ID,
-    private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+    type: process.env.type,
+    project_id: process.env.project_id,
+    private_key_id: process.env.private_key_id,
     private_key: privateKey,
-    client_email: process.env.FIREBASE_CLIENT_EMAIL,
-    client_id: process.env.FIREBASE_CLIENT_ID,
-    auth_uri: process.env.FIREBASE_AUTH_URI || "https://accounts.google.com/o/oauth2/auth",
-    token_uri: process.env.FIREBASE_TOKEN_URI || "https://oauth2.googleapis.com/token",
-    auth_provider_x509_cert_url: process.env.FIREBASE_AUTH_PROVIDER_X509_CERT_URL || "https://www.googleapis.com/oauth2/v1/certs",
-    client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL,
-    universe_domain: process.env.FIREBASE_UNIVERSE_DOMAIN || "googleapis.com"
+    client_email: process.env.client_email,
+    client_id: process.env.client_id,
+    auth_uri: process.env.auth_uri || "https://accounts.google.com/o/oauth2/auth",
+    token_uri: process.env.token_uri || "https://oauth2.googleapis.com/token",
+    auth_provider_x509_cert_url: process.env.auth_provider_x509_cert_url || "https://www.googleapis.com/oauth2/v1/certs",
+    client_x509_cert_url: process.env.client_x509_cert_url,
+    universe_domain: process.env.universe_domain || "googleapis.com"
   };
 
   console.log('Service Account Config:', {
@@ -77,9 +77,10 @@ app.get('/', (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     firebaseInitialized: admin.apps.length > 0,
     config: {
-      project_id: process.env.FIREBASE_PROJECT_ID,
-      client_email: process.env.FIREBASE_CLIENT_EMAIL,
-      private_key_exists: !!process.env.FIREBASE_PRIVATE_KEY
+      project_id: process.env.project_id,
+      client_email: process.env.client_email,
+      private_key_exists: !!process.env.private_key,
+      error: admin.apps.length === 0 ? 'Firebase initialization failed' : null
     }
   };
   console.log('Health check response:', initStatus);
@@ -89,15 +90,13 @@ app.get('/', (req, res) => {
 // Endpoint to send notification
 app.post('/send-notification', async (req, res) => {
   try {
-    const { token, title, body, data } = req.body;
-
-    if (!token) {
-      return res.status(400).json({ error: 'FCM token is required' });
-    }
-
     if (!admin.apps.length) {
       throw new Error('Firebase Admin is not initialized');
     }
+
+    const { token, title, body, data } = req.body;
+    console.log('Sending notification to:', token);
+    console.log('Notification data:', { title, body, data });
 
     const message = {
       notification: {
@@ -105,35 +104,28 @@ app.post('/send-notification', async (req, res) => {
         body,
       },
       data: data || {},
-      token,
+      token: token
     };
 
     const response = await admin.messaging().send(message);
     console.log('Successfully sent message:', response);
-    
     res.json({ success: true, messageId: response });
   } catch (error) {
-    console.error('Error sending message:', error);
-    res.status(500).json({ 
-      error: error.message,
-      code: error.code,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    console.error('Error sending notification:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 // Send multiple notifications endpoint
 app.post('/send-notifications', async (req, res) => {
   try {
-    const { tokens, title, body, data } = req.body;
-
-    if (!tokens || !Array.isArray(tokens) || tokens.length === 0) {
-      return res.status(400).json({ error: 'Array of FCM tokens is required' });
-    }
-
     if (!admin.apps.length) {
       throw new Error('Firebase Admin is not initialized');
     }
+
+    const { tokens, title, body, data } = req.body;
+    console.log('Sending notifications to:', tokens);
+    console.log('Notification data:', { title, body, data });
 
     const messages = tokens.map(token => ({
       notification: {
@@ -141,25 +133,20 @@ app.post('/send-notifications', async (req, res) => {
         body,
       },
       data: data || {},
-      token,
+      token: token
     }));
 
     const response = await admin.messaging().sendAll(messages);
     console.log('Successfully sent messages:', response);
-    
     res.json({ 
       success: true, 
       successCount: response.successCount,
       failureCount: response.failureCount,
-      responses: response.responses
+      responses: response.responses 
     });
   } catch (error) {
-    console.error('Error sending messages:', error);
-    res.status(500).json({ 
-      error: error.message,
-      code: error.code,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    console.error('Error sending notifications:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
